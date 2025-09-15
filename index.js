@@ -1,87 +1,93 @@
+// index.js
 import dotenv from "dotenv";
 dotenv.config();
-//-------------------------------
 
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb"
-import { ObjectId } from "mongodb";
-let coleccion;
-
-const urlMongo= "mongodb+srv://bertortizrod_db_user:admin@cluster0.w5muxl0.mongodb.net/";
-MongoClient.connect(urlMongo)
-.then( conexion => {
-    coleccion = conexion.db("colores").collection("colores");
-})
-.catch(error => {
-    console.error("Error conectando a MongoDB:", error);
-});
-
+import { MongoClient, ObjectId } from "mongodb";
 
 const servidor = express();
 servidor.use(express.json());
 servidor.use(cors());
 
+let coleccion;
 
-servidor.get("/colores", async (peticion, respuesta) => {
-    try{
+// 🔹 Conectar a MongoDB Atlas
+async function conectarDB() {
+    try {
+        const cliente = await MongoClient.connect(process.env.URL_MONGO);
+        coleccion = cliente.db("loginApp").collection("colores");
+        console.log("✅ Conectado a MongoDB Atlas");
+    } catch (error) {
+        console.error("❌ Error conectando a MongoDB:", error);
+        process.exit(1);
+    }
+}
+
+conectarDB();
+
+// 🔹 Rutas
+
+// Obtener todos los colores
+servidor.get("/colores", async (req, res) => {
+    try {
         const colores = await coleccion.find({}).toArray();
-        respuesta.json(colores);
-        console.log("todo ok");
-        conexion.close();
-    } catch(error){
-    respuesta.status(500);
-    respuesta.json({ error: "Error consiguiendo los colores" });
-  }
+        res.json(colores);
+        console.log("GET /colores OK");
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Error consiguiendo los colores" });
+    }
 });
 
+// Crear un nuevo color
+servidor.post("/colores/nuevo", async (req, res) => {
+    const { r, g, b } = req.body;
 
-servidor.post("/colores/nuevo", async (peticion, respuesta, siguiente) => {
-    let { r, g, b } = peticion.body;
+    const valido = [r, g, b].every(
+        v => v !== undefined && /^[0-9]{1,3}$/.test(v) && Number(v) <= 255
+    );
 
-    let valido = true;
+    if (!valido) return res.status(400).json({ error: "Valores inválidos" });
 
-    [r,g,b].forEach( valor => valido = valido && valor != undefined && /^[0-9]{1,3}$/.test(valor) && Number(valor) <= 255);
-
-    if(valido) try{
+    try {
         const resultado = await coleccion.insertOne({ r, g, b });
-        respuesta.send({ _id: resultado.insertedId });
-        respuesta.status(201);      
-    } catch(error){
-    respuesta.json({ respuesta : "error creando color"});
-    }
-    conexion.close();
-});
-
-
-servidor.delete("/colores/borrar/:id", async (peticion,respuesta, siguiente) => {
-    let valido = /^[0-9a-zA-Z]{24}$/.test(peticion.params.id);
-
-    if(!valido){
-        return siguiente(true);
-    }
-
-    try{
-        let cantidad = await coleccion.deleteOne({ _id: new ObjectId(peticion.params.id) });
-            if(!cantidad.deletedCount){
-                return siguiente(true);
-            }
-        respuesta.sendStatus(204);
-    }catch(error){
-        console.log(error);
-        respuesta.json({ error: "error en el servidor"});
-        respuesta.status(500);
+        res.status(201).json({ _id: resultado.insertedId });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Error creando color" });
     }
 });
 
-servidor.use((error, peticion, respuesta, siguiente) => {
-    respuesta.status(400);
-    respuesta.json({ error: "error en la petición"})
+// Borrar un color por ID
+servidor.delete("/colores/borrar/:id", async (req, res) => {
+    const valido = /^[0-9a-fA-F]{24}$/.test(req.params.id);
+
+    if (!valido) return res.status(400).json({ error: "ID inválido" });
+
+    try {
+        const resultado = await coleccion.deleteOne({ _id: new ObjectId(req.params.id) });
+        if (!resultado.deletedCount) return res.status(404).json({ error: "No se encontró el color" });
+        res.sendStatus(204);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Error en el servidor" });
+    }
 });
 
-servidor.use((peticion,respuesta) => {
-    respuesta.status(404);
-    respuesta.json({error: "recurso no encontrado"});
+// Middleware para manejar rutas no encontradas
+servidor.use((req, res) => {
+    res.status(404).json({ error: "Recurso no encontrado" });
 });
 
-servidor.listen(4000);
+// Middleware de errores
+servidor.use((error, req, res, next) => {
+    console.error(error);
+    res.status(400).json({ error: "Error en la petición" });
+});
+
+// 🔹 Iniciar servidor
+const PORT = process.env.PORT || 4000;
+servidor.listen(PORT, () => {
+    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+});
