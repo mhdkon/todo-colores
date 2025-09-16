@@ -1,17 +1,21 @@
-GET http://localhost:4000/colores 
+### Obtener todos los colores
+GET http://localhost:4000/colores
+Accept: application/json
 
 ###
 
+### Crear un nuevo color
 POST http://localhost:4000/colores/nuevo
 Content-Type: application/json
 
 {
-    "r": 20,
-    "g": 10,
-    "b": 15
+  "r": 255,
+  "g": 100,
+  "b": 50
 }
 
-####
+###
 
-DELETE http://localhost:4000/colores/borrar/68c2aac0f4078634fb3d1616
-
+### Borrar un color (reemplaza <ID_DEL_COLOR> por el _id real)
+DELETE http://localhost:4000/colores/borrar/<ID_DEL_COLOR>
+Accept: application/json
